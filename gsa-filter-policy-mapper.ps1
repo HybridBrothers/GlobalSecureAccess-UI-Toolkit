@@ -110,12 +110,14 @@ class FilteringProfile {
 # --------------------
 # Authentication
 # --------------------
+Write-Host "Authenticating..." -ForegroundColor Gray
 Connect-MgGraph -Scopes NetworkAccess.Read.All -ContextScope Process > $null
 
 
 # --------------------
 # Program
 # --------------------
+Write-Host "Retrieving policies..." -ForegroundColor Gray
 $JsonArray = [System.Collections.ArrayList]::new()
 $ListFilteringProfile = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/networkAccess/filteringProfiles"
 foreach ($Profile in $ListFilteringProfile) {
@@ -170,3 +172,5 @@ foreach ($Profile in $ListFilteringProfile) {
 }
 
 $JsonArray | ConvertTo-Json -Depth 10 | Out-File ".\outputs\json\filtering-policies.json"
+
+Write-Output "JSON policy file generated and saved at .\outputs\json\filtering-policies.json"

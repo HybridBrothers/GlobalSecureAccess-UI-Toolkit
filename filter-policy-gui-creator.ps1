@@ -256,4 +256,4 @@ $htmlContent += @"
 # Write the HTML content to the output file
 $htmlContent | Out-File -FilePath $htmlFilePath -Encoding utf8
 
-Write-Output "HTML file generated at $htmlFilePath"
+Write-Output "HTML file generated and saved at $htmlFilePath"
