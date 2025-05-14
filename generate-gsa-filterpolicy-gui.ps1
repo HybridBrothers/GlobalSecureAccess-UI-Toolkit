@@ -1,6 +1,18 @@
+# --------------------
+# Parameters
+# --------------------
+[cmdletbinding()]
+param(
+    [Parameter(Mandatory = $true, Position = 0, HelpMessage = "The file name for the JSON file that will be exported to /outputs/json")][ValidateNotNullOrEmpty()]
+    [string] $JsonFileName,
+    [Parameter(Mandatory = $true, Position = 0, HelpMessage = "The file name for the HTML file that will be exported to /outputs/html")][ValidateNotNullOrEmpty()]
+    [string] $HtmlFileName
+)
+
+
 # Define the JSON file path and the output HTML file path
-$jsonFilePath = ".\outputs\json\filtering-policies.json"
-$htmlFilePath = ".\outputs\html\filter-policy-gui.html"
+$jsonFilePath = ".\outputs\json\$JsonFileName"
+$htmlFilePath = ".\outputs\html\$HtmlFileName"
 
 # Read the JSON file
 $jsonData = Get-Content -Path $jsonFilePath -Raw | ConvertFrom-Json
@@ -156,6 +168,8 @@ foreach ($item in $jsonData) {
                 <th>Name</th>
                 <th>Description</th>
                 <th>State</th>
+                <th>IncludedUsers</th>
+                <th>IncludedGroups</th>
                 <th>Last Modified</th>
                 <th>Created Date</th>
             </tr>
@@ -164,11 +178,31 @@ foreach ($item in $jsonData) {
                 <td>$($item.Name)</td>
                 <td>$($item.Description)</td>
                 <td>$stateIcon $($item.State)</td>
+                <td>
+"@
+                foreach ($User in $item.IncludedUsers) {
+                    $htmlContent += @"
+                    <div>$User</div>
+"@
+                }
+
+                $htmlContent += @"
+                </td>
+                <td>
+"@
+                
+                foreach ($Group in $item.IncludedGroups) {
+                    $htmlContent += @"
+                    <div>$Group</div>
+"@
+                }
+                $htmlContent += @"
+                </td>
                 <td>$($item.LastModifiedDateTime)</td>
                 <td>$($item.CreatedDateTime)</td>
             </tr>
             <tr id="tr_policy_$($item.Id)" class="profileRow">
-                <td colspan="6">
+                <td colspan="8">
                     <div class="nested-table">
                         <table id="table_policy_$($item.Id)">
                             <tr>
@@ -254,6 +288,11 @@ $htmlContent += @"
 "@
 
 # Write the HTML content to the output file
+$directory = [System.IO.Path]::GetDirectoryName($htmlFilePath)
+if (-not (Test-Path $directory)) {
+    Write-Output "Created path $directory"
+    New-Item -ItemType Directory -Path $directory | Out-Null
+}
 $htmlContent | Out-File -FilePath $htmlFilePath -Encoding utf8
 
 Write-Output "HTML file generated and saved at $htmlFilePath"

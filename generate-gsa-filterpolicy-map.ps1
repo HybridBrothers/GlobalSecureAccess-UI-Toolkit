@@ -1,4 +1,14 @@
 # --------------------
+# Parameters
+# --------------------
+[cmdletbinding()]
+param(
+    [Parameter(Mandatory = $true, Position = 0, HelpMessage = "The file name for the JSON file that will be exported to /outputs/json")][ValidateNotNullOrEmpty()]
+    [string] $JsonFileName
+)
+
+
+# --------------------
 # Functions
 # --------------------
 Function Invoke-MgGraphAPI {
@@ -104,6 +114,8 @@ class FilteringProfile {
     [Int]$Priority
     [String]$CreatedDateTime
     [System.Collections.ArrayList]$PolicyLinks
+    [System.Collections.ArrayList]$IncludedUsers
+    [System.Collections.ArrayList]$IncludedGroups
 }
 
 
@@ -111,16 +123,25 @@ class FilteringProfile {
 # Authentication
 # --------------------
 Write-Host "Authenticating..." -ForegroundColor Gray
-Connect-MgGraph -Scopes NetworkAccess.Read.All -ContextScope Process > $null
+Connect-MgGraph -Scopes NetworkAccess.Read.All, Group.Read.All, User.Read.All, Policy.Read.ConditionalAccess -ContextScope Process > $null
 
 
 # --------------------
 # Program
 # --------------------
+$jsonFilePath = ".\outputs\json\$JsonFileName"
+
 Write-Host "Retrieving policies..." -ForegroundColor Gray
 $JsonArray = [System.Collections.ArrayList]::new()
+
+# Get all Conditional Access policies which we can use later
+$CaPolicies = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/identity/conditionalAccess/policies"
+
+# Get all Filtering Profiles
 $ListFilteringProfile = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/networkAccess/filteringProfiles"
+
 foreach ($Profile in $ListFilteringProfile) {
+    # Save each filtering profile as a new object
     $FilteringProfile = [FilteringProfile]::new()
     $FilteringProfile.Id = $Profile.id
     $FilteringProfile.Name = $Profile.name
@@ -131,6 +152,38 @@ foreach ($Profile in $ListFilteringProfile) {
     $FilteringProfile.CreatedDateTime = $Profile.createdDateTime
     $FilteringProfile.Priority = $Profile.priority
     $FilteringProfile.PolicyLinks = [System.Collections.ArrayList]::new()
+    $FilteringProfile.IncludedUsers = [System.Collections.ArrayList]::new()
+    $FilteringProfile.IncludedGroups = [System.Collections.ArrayList]::new()
+
+    # Search for the conditional access policies related to this security profile
+    foreach ($CaPolicy in $CaPolicies) {
+        if ($CaPolicy.sessionControls.globalSecureAccessFilteringProfile.profileId -eq $Profile.id) {
+            # Save users in Filter Profile by requesting UPN
+            $UserList = [System.Collections.ArrayList]::new()
+            foreach ($UserId in $CaPolicy.conditions.users.includeUsers) {
+                $UserInfo = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/users/$UserId"
+                $UserList.Add($UserInfo.userPrincipalName) | Out-Null
+            }
+
+            # Save groups in Filter Profile by requesting group display name
+            $GroupList = [System.Collections.ArrayList]::new()
+            foreach ($GroupId in $CaPolicy.conditions.users.includeGroups) {
+                $GroupInfo = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/groups/$GroupId"
+                $GroupList.Add($GroupInfo.displayName) | Out-Null
+            }
+
+            # Saving the objects to policy object
+            $FilteringProfile.IncludedUsers = $UserList
+            $FilteringProfile.IncludedGroups = $GroupList
+        }
+    }
+
+    if ($FilteringProfile.Name -eq "Baseline Profile") { 
+        $FilteringProfile.IncludedUsers.Add("All Users") | Out-Null 
+        $FilteringProfile.IncludedGroups.Add("All Users") | Out-Null 
+    }
+    if ($FilteringProfile.IncludedUsers.Count -eq 0) { $FilteringProfile.IncludedUsers.Add("None") | Out-Null }
+    if ($FilteringProfile.IncludedGroups.Count -eq 0) { $FilteringProfile.IncludedGroups.Add("None") | Out-Null }
 
     $ListPolicyLinks = Invoke-MgGraphAPI -Method "GET" -Endpoint "beta/networkaccess/filteringProfiles/$($FilteringProfile.Id)/policies"
 
@@ -171,6 +224,12 @@ foreach ($Profile in $ListFilteringProfile) {
     $JsonArray.Add($FilteringProfile) | Out-Null
 }
 
-$JsonArray | ConvertTo-Json -Depth 10 | Out-File ".\outputs\json\filtering-policies.json"
 
-Write-Output "JSON policy file generated and saved at .\outputs\json\filtering-policies.json"
+$directory = [System.IO.Path]::GetDirectoryName($jsonFilePath)
+if (-not (Test-Path $directory)) {
+    Write-Output "Created path $directory"
+    New-Item -ItemType Directory -Path $directory | Out-Null
+}
+$JsonArray | ConvertTo-Json -Depth 10 | Out-File "$jsonFilePath" -Force
+
+Write-Output "JSON policy file generated and saved at $jsonFilePath"
