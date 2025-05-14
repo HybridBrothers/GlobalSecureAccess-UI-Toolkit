@@ -6,7 +6,8 @@ This repository hosts specific UI's that can be used to visualize Global Secure 
 
 The first GUI we created is the filtering policy GUI. This GUI provides insights in the Global Secure Access Internet Access filtering policies, in a way traditional network security vendors do. The GUI generates a table for each filtering profile, and includes nested tables for each filtering policy within that profile. You can see details like priority, name, description, included users and groups (via related conditional access policies), status, and more. By sorting the priotiy in decending order, you can easily see which policies and profiles take precedence. 
 
-![alt text](assets/image.png)
+![](assets/image.png)
+
 
 To generate this GUI, two steps are needed as explained below.
 
